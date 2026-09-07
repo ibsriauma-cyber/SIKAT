@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 export const globalEmitter = new EventEmitter();
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { pool } from './src/lib/mysqlWrapper';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
@@ -35,10 +34,11 @@ async function ensureDatabaseColumns() {
   // Skipped for Postgres since we already fully initialized schema
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
 
+
+export const app = express();
+
+  
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -62,7 +62,7 @@ async function startServer() {
 
 
   // Ensure database columns on start
-  await testPoolAndInit();
+  testPoolAndInit().catch(console.error);
 
   // API Routes
 
@@ -674,10 +674,11 @@ async function startServer() {
     }
   });
 
-
-
+async function startServer() {
+  const PORT = process.env.PORT || 3000;
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -686,6 +687,9 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    // 404 for unhandled APIs
+    app.use('/api', (req, res) => { res.status(404).json({ error: 'Not found' }) });
+
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -696,4 +700,7 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
